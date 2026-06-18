@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: slabpulse
+      POSTGRES_PASSWORD: slabpulse123
+      POSTGRES_DB: slabpulse
+    ports:
+      - '5449:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U slabpulse']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - '4024:4024'
+    environment:
+      DATABASE_URL: postgresql://slabpulse:slabpulse123@postgres:5432/slabpulse?schema=public
+      JWT_SECRET: slabpulse-dev-secret
+      FRONTEND_URL: http://localhost:3024
+      PORT: 4024
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run deploy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '3024:3024'
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4024/api
+    depends_on:
+      - backend

@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  owner
+  manager
+  technician
+}
+
+enum ProjectStatus {
+  quoted
+  templating
+  cutting
+  polishing
+  edge_work
+  installation
+  completed
+  cancelled
+}
+
+enum ProjectType {
+  countertop
+  flooring
+  facade
+  vanity
+  stair
+  custom
+}
+
+enum SlabStatus {
+  in_stock
+  reserved
+  low
+  out_of_stock
+}
+
+enum SlabUnit {
+  slab
+  block
+  tile
+  remnant
+}
+
+enum SurveyStatus {
+  scheduled
+  completed
+  revision
+  approved
+  cancelled
+}
+
+enum SurveyQuality {
+  excellent
+  good
+  needs_review
+  rejected
+}
+
+enum CncTaskStatus {
+  scheduled
+  in_progress
+  completed
+  overdue
+}
+
+enum CncOperation {
+  cutting
+  polishing
+  edge
+  cnc_bridge
+  other
+}
+
+enum FinishCategory {
+  polished
+  honed
+  leather
+  bush_hammered
+  flamed
+  other
+}
+
+enum FinishStatus {
+  active
+  seasonal
+  discontinued
+}
+
+model Firm {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?  @map("zip_code")
+  totalMachines Int      @default(3) @map("total_machines")
+  timezone      String   @default("Europe/Istanbul")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  users          User[]
+  stoneProjects  StoneProject[]
+  slabInventories SlabInventory[]
+  siteSurveys    SiteSurvey[]
+  cncTasks       CncTask[]
+  finishCatalogs FinishCatalog[]
+
+  @@map("firms")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  role         UserRole @default(owner)
+  firmId       String   @map("firm_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  firm Firm @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+model StoneProject {
+  id          String        @id @default(uuid())
+  firmId      String        @map("firm_id")
+  projectNumber String      @map("project_number")
+  clientName  String        @map("client_name")
+  projectType ProjectType   @default(countertop) @map("project_type")
+  areaSqm     Float?        @map("area_sqm")
+  status      ProjectStatus @default(quoted)
+  dueDate     DateTime?     @map("due_date") @db.Date
+  machineName String?       @map("machine_name")
+  notes       String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  firm          Firm            @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  siteSurveys   SiteSurvey[]
+  slabInventories SlabInventory[]
+
+  @@unique([firmId, projectNumber])
+  @@index([firmId, status])
+  @@map("stone_projects")
+}
+
+model SlabInventory {
+  id         String     @id @default(uuid())
+  firmId     String     @map("firm_id")
+  projectId  String?    @map("project_id")
+  slabName   String     @map("slab_name")
+  stoneType  String?    @map("stone_type")
+  quantitySqm Float     @map("quantity_sqm")
+  slabUnit   SlabUnit   @default(slab) @map("slab_unit")
+  status     SlabStatus @default(in_stock)
+  receivedAt DateTime?  @map("received_at") @db.Date
+  notes      String?
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  firm    Firm          @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  project StoneProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([firmId, status])
+  @@map("slab_inventories")
+}
+
+model SiteSurvey {
+  id            String        @id @default(uuid())
+  firmId        String        @map("firm_id")
+  projectId     String        @map("project_id")
+  surveyedAt    DateTime      @map("surveyed_at")
+  surveyQuality SurveyQuality @default(good) @map("survey_quality")
+  revisionNotes String?       @map("revision_notes")
+  status        SurveyStatus  @default(scheduled)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  firm    Firm         @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  project StoneProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, status])
+  @@index([firmId, surveyedAt])
+  @@map("site_surveys")
+}
+
+model CncTask {
+  id          String        @id @default(uuid())
+  firmId      String        @map("firm_id")
+  title       String
+  description String?
+  operation   CncOperation  @default(cutting)
+  machineName String?       @map("machine_name")
+  scheduledAt DateTime      @map("scheduled_at")
+  status      CncTaskStatus @default(scheduled)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  firm Firm @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, scheduledAt])
+  @@map("cnc_tasks")
+}
+
+model FinishCatalog {
+  id             String         @id @default(uuid())
+  firmId         String         @map("firm_id")
+  title          String
+  finishCategory FinishCategory @default(polished) @map("finish_category")
+  status         FinishStatus   @default(active)
+  pricePerSqm    Float          @map("price_per_sqm")
+  leadDays       Float?         @map("lead_days")
+  notes          String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  firm Firm @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId, finishCategory])
+  @@map("finish_catalogs")
+}
